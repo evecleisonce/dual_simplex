@@ -1,7 +1,7 @@
 # Importando bibliotecas
 import dualsimplex as ds
 
-A, b, c, tipo_problema, sinais_variaveis, sinal_restricao = ds.ler_arquivo_entrada('test.txt')
+A, b, c, tipo_problema, sinais_variaveis, sinal_restricao, valor_limite = ds.ler_arquivo_entrada('test.txt')
 
 # Forma padrão
 A, b, c, tipo_variavel = ds.transformar_padrao(A, b, c, tipo_problema, sinais_variaveis, sinal_restricao)
