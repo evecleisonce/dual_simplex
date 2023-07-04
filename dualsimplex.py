@@ -26,12 +26,13 @@ def ler_arquivo_entrada(caminho_arquivo):
     # Extrair a matriz A, o vetor b e o sinal de restrição ( -1 para <=, 1 para >= e 0 para =)
     sinal_restricao = []
     A = []
+
     b = []
     for h in range(2,(2*M)+1,2):
         sinal_restricao.append(int(linhas[h].strip()))
         A.append(list(map(float, linhas[h+1].strip().split())))
-        b.append(A.pop(-1)[-1])
-        print(b)
+        b.append(A[-1].pop(-1))
+        #print(b)
 
     # Extrair as restrições de sianis das varivaies (-1 se menor ou igual e 1 se maior ou igual)
     # Caso a variável seja livre, a restrição terá apenas um valor coringa que adotaremos como sendo o 0.
@@ -39,10 +40,14 @@ def ler_arquivo_entrada(caminho_arquivo):
     valor_limite = []
     for h in range(2*M+2,len(linhas)):
         sinal_variaveis.append(list(map(int,linhas[h].strip().split())))
-        if sinal_variaveis != 0:
-            valor_limite.append(sinal_variaveis.pop(-1)[-1])
+        if sinal_variaveis[-1][0] != 0:
+            valor_limite.append(sinal_variaveis[-1].pop(-1))
         else:
             valor_limite.append(0)
+
+    # Usar flatten
+    sinal_variaveis = [item for sublist in sinal_variaveis for item in sublist]
+
     return A, b, c, tipo_problema, sinal_restricao, sinal_variaveis, valor_limite
 
 
@@ -55,6 +60,28 @@ def converter_max_min(c, tipo_problema):
         return c
 
 # TODO: Função para tratar as varivaies que tem valor limite != 0 e sinal != 0
+# Eu defino uma nova restrisçao e trato o sinal.
+
+# Função para lidar com variaveis != 0
+def tratar_variaveis(A, b, sinal_restricao, sinais_variaveis, valor_limite):
+    A_add = A.copy()
+    b_add = b.copy()
+    sinal_restricao_add = sinal_restricao.copy()
+    for i in range(len(valor_limite)):
+        if valor_limite[i] != 0:
+            # Adiciona uma nova restrição no final da matriz A que tem N zeros e um 1 na posição da variável
+            # que tem valor limite != 0
+            A_add.append([0]*len(A[0]))
+            A_add[-1][i] = 1
+            # Adiciona o valor limite no vetor b
+            b_add.append(valor_limite[i])
+            # Adiciona o sinal de restrição
+            sinal_restricao_add.append(sinais_variaveis[i])
+
+
+
+    return A_add, b_add, sinal_restricao_add
+
 
 
 
@@ -69,7 +96,7 @@ def remover_inequacao(A, c, sinal_restricao, sinais_variaveis):
 
     for i in range(len(sinal_restricao)):
         # É iqualdade então mantem.
-        if sinal_restricao[i] == 2:
+        if sinal_restricao[i] == 0:
             if i != len(A) - 1:
                 A_convert.append(A[i])
                 c_convert.append(c[i])
@@ -90,7 +117,7 @@ def remover_inequacao(A, c, sinal_restricao, sinais_variaveis):
                     A_convert[j].append(0)
         # É menor ou igual então adiciona uma variável de folga "negativa" na linha e zeros nas outras.
         # Adiciona 0 no vetor c
-        elif sinal_restricao[i] == 0:
+        elif sinal_restricao[i] == -1:
             A_convert.append(A[i])
             A_convert[i].append(-1)
             c_convert.append(0)
@@ -101,7 +128,7 @@ def remover_inequacao(A, c, sinal_restricao, sinais_variaveis):
             if i != len(A) - 1:
                 A_convert.append(A[i + 1])
             # Adiciona zero nas outras linhas
-            for j in range(len(A)):
+            for j in range(len(A_convert)):
                 if j != i:
                     A_convert[j].append(0)
     # Agora com a matriz convertida deixa
@@ -166,9 +193,12 @@ def remover_negativos_b(A, b):
 
 
 # Finalmente transoforma na forma padrão
-def transformar_padrao(A, b, c, tipo_problema, sinais_variaveis, sinal_restricao):
+def transformar_padrao(A, b, c, tipo_problema, sinais_variaveis, sinal_restricao, valor_limite):
     # Converter problema de maximização para minimização
     c = converter_max_min(c, tipo_problema)
+
+    # Tratar a restrição de sinal
+    A, b, sinais_variaveis = tratar_variaveis(A, b, sinal_restricao, sinais_variaveis, valor_limite)
 
     # Remover inequações
     A, c, sinais_variaveis, tipo_variavel = remover_inequacao(A, c, sinal_restricao, sinais_variaveis)
