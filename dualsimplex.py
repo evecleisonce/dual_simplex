@@ -88,7 +88,7 @@ def tratar_variaveis(A, b, sinal_restricao, sinais_variaveis, valor_limite):
 # Função para remover inequaçao seguindo a regra de sinal_restricao
 # 0 para <=, 1 para >= e 2 para =
 def remover_inequacao(A, c, sinal_restricao, sinais_variaveis):
-    A_convert = []
+    A_convert = np.array(A.copy())
     tipo_variavel = []
     c_convert = c.copy()
     sinais_var_convt = sinais_variaveis.copy()
@@ -96,44 +96,33 @@ def remover_inequacao(A, c, sinal_restricao, sinais_variaveis):
 
     for i in range(len(sinal_restricao)):
         # É iqualdade então mantem.
-        if sinal_restricao[i] == 0:
-            if i != len(A) - 1:
-                A_convert.append(A[i])
-                c_convert.append(c[i])
-
-        # É maior ou igual então adiciona uma variável de folga na linha e zeros nas outras.
+        # Se -1 então é menor ou igual, então adiciona uma variável de folga "negativa" na linha e zeros nas outras.
         # Adiciona 0 no vetor c
+        if sinal_restricao[i] == -1:
+            g = np.zeros((len(sinal_restricao),1))
+            g[i][0] = -1
+            A_convert = np.concatenate((A_convert,g),axis=1)
+            c_convert.append(0)
+            sinais_var_convt.append(0)
+            tipo_variavel.append('f')
+
+        # Se 1 então é maior ou igual, então adiciona uma variável de folga na linha e zeros nas outras.
+        # Adiciona 0 no vetor c
+        # Eu posso criar um vetor coluna onde o [i] é igual a 1 e o resto é zero
+
         elif sinal_restricao[i] == 1:
-            A_convert.append(A[i])
-            A_convert[i].append(1)
+            g = np.zeros((len(sinal_restricao),1))
+            g[i][0] = 1
+            A_convert = np.concatenate((A_convert,g),axis=1)
             c_convert.append(0)
-            # Adiciona zero nas outras linhas
             sinais_var_convt.append(0)
             tipo_variavel.append('f')
-            if i != len(A) - 1:
-                A_convert.append(A[i + 1])
-            for j in range(len(A)):
-                if j != i:
-                    A_convert[j].append(0)
-        # É menor ou igual então adiciona uma variável de folga "negativa" na linha e zeros nas outras.
-        # Adiciona 0 no vetor c
-        elif sinal_restricao[i] == -1:
-            A_convert.append(A[i])
-            A_convert[i].append(-1)
-            c_convert.append(0)
 
-            sinais_var_convt.append(0)
-            tipo_variavel.append('f')
-            # Preciso verificar se está na ultima linha ou não, se não tiver pega a proxima e adiciona, se tiver, não faz nada
-            if i != len(A) - 1:
-                A_convert.append(A[i + 1])
-            # Adiciona zero nas outras linhas
-            for j in range(len(A_convert)):
-                if j != i:
-                    A_convert[j].append(0)
-    # Agora com a matriz convertida deixa
-    return A, c_convert, sinais_var_convt, tipo_variavel
+    return A_convert, c_convert, sinais_var_convt, tipo_variavel
 
+
+# O problema está adiconado o item atual e o proximop mas agora eu não sei o que fazer, devo tratar todas ?
+#
 
 # Função para transformar as variáveis livres e negativas em não negativas
 # 0 para não negativas, 1 para livres, 2 para negativas
@@ -198,7 +187,7 @@ def transformar_padrao(A, b, c, tipo_problema, sinais_variaveis, sinal_restricao
     c = converter_max_min(c, tipo_problema)
 
     # Tratar a restrição de sinal
-    A, b, sinais_variaveis = tratar_variaveis(A, b, sinal_restricao, sinais_variaveis, valor_limite)
+    A, b, sinal_restricao = tratar_variaveis(A, b, sinal_restricao, sinais_variaveis, valor_limite)
 
     # Remover inequações
     A, c, sinais_variaveis, tipo_variavel = remover_inequacao(A, c, sinal_restricao, sinais_variaveis)
