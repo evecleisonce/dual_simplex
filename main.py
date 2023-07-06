@@ -14,3 +14,9 @@ print('\n'+ '----------------------------------' + '\n')
 A_fase1, c_fase1, tipo_variavel_fase1= ds.cria_primeira_fase(A, c, tipo_variavel)
 
 ds.imprimir_primeira_fase(A_fase1, b, c_fase1, tipo_variavel_fase1)
+
+ds.simplex_primeira_fase(A_fase1, b, c_fase1,tipo_variavel_fase1)
+
+
+print('\n'+ '----------------------------------' + '\n')
+

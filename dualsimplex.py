@@ -103,7 +103,7 @@ def remover_inequacao(A, c, sinal_restricao, sinais_variaveis):
             g[i][0] = -1
             A_convert = np.concatenate((A_convert,g),axis=1)
             c_convert.append(0)
-            sinais_var_convt.append(0)
+            sinais_var_convt.append(1)
             tipo_variavel.append('f')
 
         # Se 1 então é maior ou igual, então adiciona uma variável de folga na linha e zeros nas outras.
@@ -115,7 +115,7 @@ def remover_inequacao(A, c, sinal_restricao, sinais_variaveis):
             g[i][0] = 1
             A_convert = np.concatenate((A_convert,g),axis=1)
             c_convert.append(0)
-            sinais_var_convt.append(0)
+            sinais_var_convt.append(1)
             tipo_variavel.append('f')
 
     return A_convert, c_convert, sinais_var_convt, tipo_variavel
@@ -125,15 +125,17 @@ def remover_inequacao(A, c, sinal_restricao, sinais_variaveis):
 #
 
 # Função para transformar as variáveis livres e negativas em não negativas
-# 0 para não negativas, 1 para livres, 2 para negativas
+# -1 se menor ou igual e 1 se maior ou igual e 0 se livre
 # Caso seja nao negativa, so mantem;
 # Caso seja negativa, multiplica a coluna da variavel por -1, inclusive a coluna referente ao vetor c;
 # Caso seja livre, troca a variavel por duas variaveis nao negativas, uma positiva e outra negativa,
 # e no vetor C substitui a variavel por duas variaveis, uma positiva e outra negativa;
 # Levando em consideração que A é uma Matriz e c é um vetor.
-def transformar_variaveis_nao_negativas(A, b, c, sinais_variaveis):
-    A = np.array(A)
-    c = np.array(c)
+def transformar_variaveis_nao_negativas(A, b, c, sinais_variaveis, tipo_variavel):
+    A = A.copy()
+    c = c.copy()
+    b = b.copy()
+    tipo_variavel = tipo_variavel.copy()
     sinais_variaveis = np.array(sinais_variaveis)
 
     num_variaveis = A.shape[1]
@@ -141,34 +143,39 @@ def transformar_variaveis_nao_negativas(A, b, c, sinais_variaveis):
 
     # Transformar variáveis negativas
     for i in range(num_variaveis):
-        if sinais_variaveis[i] == 2:  # Variável negativa
+        if sinais_variaveis[i] == -1:  # Variável negativa
             A[:, i] *= -1
             c[i] *= -1
+            #tipo_variavel[i] = '0'
 
     # Transformar variáveis livres
     A_transformed = []
     b_transformed = []
     c_transformed = []
+    tipo_variavel_transformed = []
 
     for i in range(num_variaveis):
-        if sinais_variaveis[i] == 1:  # Variável livre
+        if sinais_variaveis[i] == 0:  # Variável livre
             # Introduzir duas variáveis não negativas
             A_transformed.append(A[:, i])
             A_transformed.append(-A[:, i])
             b_transformed.append(b)
-            b_transformed.append(-b)
-            c_transformed.append(c[i])
+            b_transformed.append([ele * (-1) for ele in b])
+            c_transformed.append(c[i]) # TODO: POSSIVEL BUG
             c_transformed.append(-c[i])
+            tipo_variavel_transformed.append(0)
+            tipo_variavel_transformed.append(0)
         else:  # Variável não negativa
             A_transformed.append(A[:, i])
             b_transformed.append(b)
             c_transformed.append(c[i])
+            tipo_variavel_transformed.append(tipo_variavel[i])
 
     A_transformed = np.array(A_transformed).T
     b_transformed = np.array(b_transformed[0])
     c_transformed = np.array(c_transformed)
 
-    return A_transformed.tolist(), b_transformed.tolist(), c_transformed.tolist()
+    return A_transformed.tolist(), b_transformed.tolist(), c_transformed.tolist(), tipo_variavel_transformed
 
 
 # Função para sinal negativo do vetor b.
@@ -193,7 +200,7 @@ def transformar_padrao(A, b, c, tipo_problema, sinais_variaveis, sinal_restricao
     A, c, sinais_variaveis, tipo_variavel = remover_inequacao(A, c, sinal_restricao, sinais_variaveis)
 
     # Transformar variáveis livres e negativas em não negativas
-    A, b, c = transformar_variaveis_nao_negativas(A, b, c, sinais_variaveis)
+    A, b, c, tipo_variavel = transformar_variaveis_nao_negativas(A, b, c, sinais_variaveis, tipo_variavel)
 
     # Remover negativos do vetor b
     A, b = remover_negativos_b(A, b)
@@ -212,10 +219,14 @@ def imprimir_forma_padrao(A, b, c, tipo_variavel):
     elif c[0] < 0 and tipo_variavel[0] == 0:
         objetivo += " -{}x{}".format(-c[0], 1)
     for i in range(1, num_variaveis):
-        if c[i] >= 0:
+        if c[i] >= 0 and tipo_variavel[i] == 0:
             objetivo += " +{}x{}".format(c[i], i + 1)
-        else:
+        elif c[i] < 0 and tipo_variavel[i] == 0:
             objetivo += " -{}x{}".format(-c[i], i + 1)
+        elif c[i] >= 0 and tipo_variavel[i] == 'f':
+            objetivo += " +{}f{}1".format(c[i], i + 1)
+        elif c[i] < 0 and tipo_variavel[i] == 'f':
+            objetivo += " -{}f{}1".format(-c[i], i + 1)
     print("Min ", objetivo)
 
     # Imprimir as restrições
@@ -346,3 +357,65 @@ def imprimir_primeira_fase(A, b, c, tipo_variavel):
     for i in range(num_restricoes):
         print(" " + "y{},".format(i + 1), end="")
     print(" >= 0")
+
+
+# FINALMENTE IMPLEMTANDO O SIMPLEX
+# Função para resolver o simplex primeira fase
+def simplex_primeira_fase(A, b, c, tipo_variavel):
+    A = np.array(A.copy())
+    b = np.array(b.copy())
+    c = np.array(c.copy())
+    m, n = A.shape
+
+
+    # Determinar a base inicial
+    base_indices = [i for i, var in enumerate(tipo_variavel) if var == 'y']
+    B = A[:, base_indices]
+    N = A[:, [i for i in range(n) if i not in base_indices]]
+
+    # Criando a matriz c_B e c_N
+    c_B = c[base_indices]
+    c_N = c[[i for i in range(n) if i not in base_indices]]
+    try:
+        B_inv = np.linalg.inv(B)
+    except:
+        print("O problema não tem solução viável")
+        return
+
+    # Varivael para saber qual a organização original das variáveis para poder aplicar a regra de Bland
+    organizacao_original = [i for i in range(n)]
+    org_N = [i for i in range(len([N[0]]))]
+    org_B = [i for i in range(len(N[0]), len(N[0]) + len(B[0]))]
+
+
+    # Roda o simplex até encontrar o otimo ou parar por inviabilidade
+    while True:
+        # Calcula a
+        # Realiza o teste de otimalidade
+        otimo = c_N - np.dot(c_B, np.linalg.inv(B).dot(N))
+        # Se o vetor for maior que zero então encontramos o otimo
+        if all(otimo >= 0):
+            break
+
+        # Seleciona o indice j, pegando um valor negativo do vetor otimo que tenha o menor indice referente a org_N
+        j = org_N[np.where(otimo < 0)[0][0]]
+
+        # Calcula a direção simplex
+        d_b = np.dot(-B_inv, N[:, j])
+        # Realiza o teste de inviabilidade
+        if all(d_b <= 0):
+            raise(print("Problema Ilimitado"))
+
+        #Calcula x_b
+        x_b = np.dot(B_inv, b)
+
+        # Seleciona o indice k, pegando o menor valor de b/d_b para os valores negativos de d_b, se tiver empate pega o menor indice referente a org_B
+        
+
+
+
+
+
+
+
+
