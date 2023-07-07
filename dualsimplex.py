@@ -100,7 +100,7 @@ def remover_inequacao(A, c, sinal_restricao, sinais_variaveis):
         # Adiciona 0 no vetor c
         if sinal_restricao[i] == -1:
             g = np.zeros((len(sinal_restricao),1))
-            g[i][0] = -1
+            g[i][0] = 1
             A_convert = np.concatenate((A_convert,g),axis=1)
             c_convert.append(0)
             sinais_var_convt.append(1)
@@ -112,7 +112,7 @@ def remover_inequacao(A, c, sinal_restricao, sinais_variaveis):
 
         elif sinal_restricao[i] == 1:
             g = np.zeros((len(sinal_restricao),1))
-            g[i][0] = 1
+            g[i][0] = -1
             A_convert = np.concatenate((A_convert,g),axis=1)
             c_convert.append(0)
             sinais_var_convt.append(1)
@@ -384,18 +384,132 @@ def simplex_primeira_fase(A, b, c, tipo_variavel):
 
     # Varivael para saber qual a organização original das variáveis para poder aplicar a regra de Bland
     organizacao_original = [i for i in range(n)]
-    org_N = [i for i in range(len([N[0]]))]
+    org_N = [i for i in range(len(N[0]))]
     org_B = [i for i in range(len(N[0]), len(N[0]) + len(B[0]))]
-
 
     # Roda o simplex até encontrar o otimo ou parar por inviabilidade
     while True:
         # Calcula a
         # Realiza o teste de otimalidade
-        otimo = c_N - np.dot(c_B, np.linalg.inv(B).dot(N))
+        otimo = c_N - c_B @ B_inv @ N
         # Se o vetor for maior que zero então encontramos o otimo
         if all(otimo >= 0):
-            break
+            if np.dot(c_B, np.linalg.inv(B).dot(b)) == 0:
+                return B_inv, B, N, c_B, c_N, base_indices, org_B, org_N
+            else:
+                print("Problema inviável")
+                return
+
+        # Seleciona o indice j, pegando um valor negativo do vetor otimo que tenha o menor indice referente a org_N
+
+        #j = org_N[np.argmin(otimo)]
+        j = org_N[np.where(otimo < 0)[0][0]]
+        # XTODO: Eu troquei bland por Steepst Descent
+
+        # Calcula a direção simplex
+        d_b = -B_inv @ N[:, j]
+        # Realiza o teste de inviabilidade
+        if all(d_b >= 0):
+            print("Problema Ilimitado")
+            return
+
+        #Calcula x_b
+        x_b = B_inv @ b
+
+        if np.all(x_b == 0):
+            print("teste")
+        # Seleciona o indice k, pegando o menor valor de x_b/d_b para os valores negativos de d_b, se tiver empate pega o menor indice referente a org_B
+        negative_indices = np.where(d_b < 0)[0]
+        b_div_d_b = -x_b[negative_indices] / d_b[negative_indices]
+        min_ratio_indices = np.where(b_div_d_b == np.min(b_div_d_b))[0]
+        k = org_B[negative_indices[min_ratio_indices[0]]]
+        # Troca as variáveis de base, K do conjunto B e J do conjunto N, e atualiza as c_B, c_N, B_inv, B e N
+
+
+        base_indices[base_indices.index(k)] = j
+        org_B[org_B.index(k)] = j
+        org_N[org_N.index(j)] = k
+        c_B[base_indices.index(j)] = c[j]
+        c_N[org_N.index(k)] = c[k]
+        B[:, base_indices.index(j)] = N[:, org_N.index(k)]
+        N[:, org_N.index(k)] = A[:, j]
+        B_inv = np.linalg.inv(B)
+
+
+def criar_problema_auxiliar(A, b, c, tipo_variavel, base_indices):
+    A = np.array(A.copy())
+    b = np.array(b.copy())
+    c_aux = np.array(c.copy())
+    tipo_variavel = tipo_variavel.copy()
+    base_indices = base_indices.copy()
+    m, n = A.shape
+
+    # Eu crio uma nova linha na matriz A, onde tiver y, e adiciono mais um.
+    # Adicono uma nova restrição =0 em b
+    # Adiciono novo custo em c = 0
+    # Adiciona Z em tipo de variavel
+    # Adiciona o indice da nova variavel no base_indices
+
+    # Adicionando a nova linha e coluna em A
+    nova_linha_zeros = np.zeros((1, A.shape[1]))
+    # Inserir a nova linha de zeros abaixo da matriz original
+    A_aux = np.vstack((A, nova_linha_zeros))
+    # Inserir a nova coluna de zeros a direita da matriz original
+    nova_coluna_zeros = np.zeros((A_aux.shape[0], 1))
+    A_aux = np.hstack((A_aux, nova_coluna_zeros))
+
+    # Adicionando Z em tipo_variavel
+    tipo_variavel.append('z')
+
+    # Na ultima coluna de A_aux, eu troco por 1 se tipo_variavel for 'y' ou 'z'
+    for i in range(len(tipo_variavel)):
+        if tipo_variavel[i] == 'y' or tipo_variavel[i] == 'z':
+            A_aux[-1, i] = 1
+
+            # Adicionando o novo custo em c
+            c_aux = np.append(c_aux, 0)
+
+    # Adicionando a nova restrição em b
+    b_aux = np.append(b, 0)
+
+    # Adicionando o indice da nova variavel no base_indices
+    base_indices.append(A_aux.shape[1] - 1)
+
+    return A_aux, b_aux, c_aux, tipo_variavel, base_indices
+
+
+def simplex(A, b, c, base_indices):
+    A = np.array(A.copy())
+    b = np.array(b.copy())
+    c = np.array(c.copy())
+    m, n = A.shape
+    base_indices = base_indices.copy()
+
+    B = A[:, base_indices]
+    N = A[:, [i for i in range(n) if i not in base_indices]]
+
+    # Criando a matriz c_B e c_N
+    c_B = c[base_indices]
+    c_N = c[[i for i in range(n) if i not in base_indices]]
+    try:
+        B_inv = np.linalg.inv(B)
+    except:
+        print("O problema não tem solução viável")
+        return
+
+    # Varivael para saber qual a organização original das variáveis para poder aplicar a regra de Bland
+    org_B = base_indices.copy()
+    # org_N vai receber o tamanho do vetor de C exceto os indices da base
+    org_N = [i for i in range(len(c)) if i not in base_indices]
+
+    # Roda o simplex até encontrar o otimo ou parar por inviabilidade
+    while True:
+        # Calcula a
+        # Realiza o teste de otimalidade
+        otimo = c_N - c_B @ B_inv @ N
+        # Se o vetor for maior que zero então encontramos o otimo
+        if all(otimo >= 0):
+                return B_inv, B, N, c_B, c_N, base_indices
 
         # Seleciona o indice j, pegando um valor negativo do vetor otimo que tenha o menor indice referente a org_N
         j = org_N[np.where(otimo < 0)[0][0]]
@@ -403,19 +517,30 @@ def simplex_primeira_fase(A, b, c, tipo_variavel):
         # Calcula a direção simplex
         d_b = np.dot(-B_inv, N[:, j])
         # Realiza o teste de inviabilidade
-        if all(d_b <= 0):
-            raise(print("Problema Ilimitado"))
+        if all(d_b >= 0):
+            print("Problema Ilimitado")
+            return None, None, None, None, None, None
 
         #Calcula x_b
         x_b = np.dot(B_inv, b)
 
-        # Seleciona o indice k, pegando o menor valor de b/d_b para os valores negativos de d_b, se tiver empate pega o menor indice referente a org_B
-        
+        if np.all(x_b == 0):
+            print("teste")
+        # Seleciona o indice k, pegando o menor valor de x_b/d_b para os valores negativos de d_b, se tiver empate pega o menor indice referente a org_B
+        negative_indices = np.where(d_b < 0)[0]
+        b_div_d_b = -x_b[negative_indices] / d_b[negative_indices]
+        min_ratio_indices = np.where(b_div_d_b == np.min(b_div_d_b))[0]
+        k = org_B[negative_indices[min_ratio_indices[0]]]
 
+        # Troca as variáveis de base, K do conjunto B e J do conjunto N, e atualiza as c_B, c_N, B_inv, B e N
 
-
-
-
-
+        base_indices[base_indices.index(k)] = j
+        org_B[org_B.index(k)] = j
+        org_N[org_N.index(j)] = k
+        c_B[base_indices.index(j)] = c[j]
+        c_N[org_N.index(k)] = c[k]
+        B[:, base_indices.index(j)] = N[:, org_N.index(k)]
+        N[:, org_N.index(k)] = A[:, j]
+        B_inv = np.linalg.inv(B)
 
 
