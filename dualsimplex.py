@@ -402,38 +402,46 @@ def simplex_primeira_fase(A, b, c, tipo_variavel):
 
         # Seleciona o indice j, pegando um valor negativo do vetor otimo que tenha o menor indice referente a org_N
 
-        #j = org_N[np.argmin(otimo)]
-        j = org_N[np.where(otimo < 0)[0][0]]
-        # XTODO: Eu troquei bland por Steepst Descent
+        indices_negativos = list(np.where(otimo < 0)[0])
+        org_N_aux = [org_N[i] for i in indices_negativos]
+        j = np.argmin(org_N_aux)
+        #j = org_N[indice_min_org_N]
 
         # Calcula a direção simplex
         d_b = -B_inv @ N[:, j]
         # Realiza o teste de inviabilidade
         if all(d_b >= 0):
             print("Problema Ilimitado")
-            return
+            return None, None, None, None, None, None, None, None
 
         #Calcula x_b
         x_b = B_inv @ b
 
-        if np.all(x_b == 0):
-            print("teste")
         # Seleciona o indice k, pegando o menor valor de x_b/d_b para os valores negativos de d_b, se tiver empate pega o menor indice referente a org_B
         negative_indices = np.where(d_b < 0)[0]
         b_div_d_b = -x_b[negative_indices] / d_b[negative_indices]
         min_ratio_indices = np.where(b_div_d_b == np.min(b_div_d_b))[0]
-        k = org_B[negative_indices[min_ratio_indices[0]]]
+
+        org_B_aux = [org_B[i] for i in min_ratio_indices]
+        k = np.argmin(org_B_aux)
+        #k = org_B[indice_min_org_B]
         # Troca as variáveis de base, K do conjunto B e J do conjunto N, e atualiza as c_B, c_N, B_inv, B e N
 
+        base_k_aux = base_indices[k]
+        base_indices[k] = org_N[j]
+        org_N[j] = base_k_aux
+        org_B = base_indices.copy()
 
-        base_indices[base_indices.index(k)] = j
-        org_B[org_B.index(k)] = j
-        org_N[org_N.index(j)] = k
-        c_B[base_indices.index(j)] = c[j]
-        c_N[org_N.index(k)] = c[k]
-        B[:, base_indices.index(j)] = N[:, org_N.index(k)]
-        N[:, org_N.index(k)] = A[:, j]
+        c_B_aux = c_B[k]
+        c_B[k] = c_N[j]
+        c_N[j] = c_B_aux
+
+        B_aux = B[:,k].copy()
+        B[:, k] = N[:,j].copy()
+        N[:, j] = B_aux
+
         B_inv = np.linalg.inv(B)
+
 
 
 def criar_problema_auxiliar(A, b, c, tipo_variavel, base_indices):
