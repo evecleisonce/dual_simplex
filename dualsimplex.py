@@ -404,8 +404,9 @@ def simplex_primeira_fase(A, b, c, tipo_variavel):
 
         indices_negativos = list(np.where(otimo < 0)[0])
         org_N_aux = [org_N[i] for i in indices_negativos]
-        j = np.argmin(org_N_aux)
+        j = indices_negativos[np.argmin(org_N_aux)]# Retorna a posição do menor valor de org_N_aux
         #j = org_N[indice_min_org_N]
+
 
         # Calcula a direção simplex
         d_b = -B_inv @ N[:, j]
@@ -422,8 +423,11 @@ def simplex_primeira_fase(A, b, c, tipo_variavel):
         b_div_d_b = -x_b[negative_indices] / d_b[negative_indices]
         min_ratio_indices = np.where(b_div_d_b == np.min(b_div_d_b))[0]
 
-        org_B_aux = [org_B[i] for i in min_ratio_indices]
-        k = np.argmin(org_B_aux)
+        if len(min_ratio_indices) == 1:
+            k = int(negative_indices[min_ratio_indices])
+        else:
+            org_B_aux = [org_B[i] for i in min_ratio_indices]
+            k = int(negative_indices[np.argmin(org_B_aux)])
         #k = org_B[indice_min_org_B]
         # Troca as variáveis de base, K do conjunto B e J do conjunto N, e atualiza as c_B, c_N, B_inv, B e N
 
@@ -493,12 +497,12 @@ def simplex(A, b, c, base_indices):
     m, n = A.shape
     base_indices = base_indices.copy()
 
-    B = A[:, base_indices]
-    N = A[:, [i for i in range(n) if i not in base_indices]]
+    B = A[:, base_indices].copy()
+    N = A[:, [i for i in range(n) if i not in base_indices]].copy()
 
     # Criando a matriz c_B e c_N
-    c_B = c[base_indices]
-    c_N = c[[i for i in range(n) if i not in base_indices]]
+    c_B = c[base_indices].copy()
+    c_N = c[[i for i in range(n) if i not in base_indices]].copy()
     try:
         B_inv = np.linalg.inv(B)
     except:
@@ -510,45 +514,56 @@ def simplex(A, b, c, base_indices):
     # org_N vai receber o tamanho do vetor de C exceto os indices da base
     org_N = [i for i in range(len(c)) if i not in base_indices]
 
-    # Roda o simplex até encontrar o otimo ou parar por inviabilidade
     while True:
         # Calcula a
         # Realiza o teste de otimalidade
         otimo = c_N - c_B @ B_inv @ N
         # Se o vetor for maior que zero então encontramos o otimo
         if all(otimo >= 0):
-                return B_inv, B, N, c_B, c_N, base_indices
-
+            return B_inv, B, N, c_B, c_N, base_indices, org_B, org_N
         # Seleciona o indice j, pegando um valor negativo do vetor otimo que tenha o menor indice referente a org_N
-        j = org_N[np.where(otimo < 0)[0][0]]
+
+        indices_negativos = list(np.where(otimo < 0)[0])
+        org_N_aux = [org_N[i] for i in indices_negativos]
+        j = indices_negativos[np.argmin(org_N_aux)]# Retorna a posição do menor valor de org_N_aux
+        #j = org_N[indice_min_org_N]
+
 
         # Calcula a direção simplex
-        d_b = np.dot(-B_inv, N[:, j])
+        d_b = -B_inv @ N[:, j]
         # Realiza o teste de inviabilidade
         if all(d_b >= 0):
             print("Problema Ilimitado")
-            return None, None, None, None, None, None
+            return None, None, None, None, None, None, None, None
 
         #Calcula x_b
-        x_b = np.dot(B_inv, b)
+        x_b = B_inv @ b
 
-        if np.all(x_b == 0):
-            print("teste")
         # Seleciona o indice k, pegando o menor valor de x_b/d_b para os valores negativos de d_b, se tiver empate pega o menor indice referente a org_B
         negative_indices = np.where(d_b < 0)[0]
         b_div_d_b = -x_b[negative_indices] / d_b[negative_indices]
         min_ratio_indices = np.where(b_div_d_b == np.min(b_div_d_b))[0]
-        k = org_B[negative_indices[min_ratio_indices[0]]]
 
+        if len(min_ratio_indices) == 1:
+            k = int(negative_indices[min_ratio_indices])
+        else:
+            org_B_aux = [org_B[i] for i in min_ratio_indices]
+            k = int(negative_indices[np.argmin(org_B_aux)])
+        #k = org_B[indice_min_org_B]
         # Troca as variáveis de base, K do conjunto B e J do conjunto N, e atualiza as c_B, c_N, B_inv, B e N
 
-        base_indices[base_indices.index(k)] = j
-        org_B[org_B.index(k)] = j
-        org_N[org_N.index(j)] = k
-        c_B[base_indices.index(j)] = c[j]
-        c_N[org_N.index(k)] = c[k]
-        B[:, base_indices.index(j)] = N[:, org_N.index(k)]
-        N[:, org_N.index(k)] = A[:, j]
-        B_inv = np.linalg.inv(B)
+        base_k_aux = base_indices[k]
+        base_indices[k] = org_N[j]
+        org_N[j] = base_k_aux
+        org_B = base_indices.copy()
 
+        c_B_aux = c_B[k]
+        c_B[k] = c_N[j]
+        c_N[j] = c_B_aux
+
+        B_aux = B[:,k].copy()
+        B[:, k] = N[:,j].copy()
+        N[:, j] = B_aux
+
+        B_inv = np.linalg.inv(B)
 
